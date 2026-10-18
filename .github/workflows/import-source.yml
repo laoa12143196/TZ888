@@ -19,19 +19,38 @@ jobs:
           fetch-depth: 0
 
       - name: Download source archive
+        shell: bash
         run: |
-          curl --fail --location --retry 3 --retry-delay 2 \
-            "https://temp.sh/aeVrQ/jiuye-sub-manager-source.tar.gz" \
-            --output /tmp/jiuye-sub-manager-source.tar.gz
-          echo "dcaeee8766b017db9c7110854dff9b900752fe4a245ae50160d55ea95ade4480  /tmp/jiuye-sub-manager-source.tar.gz" | sha256sum --check -
+          set -euo pipefail
+          expected="dcaeee8766b017db9c7110854dff9b900752fe4a245ae50160d55ea95ade4480"
+          archive="/tmp/jiuye-sub-manager-source.tar.gz"
+          urls=(
+            "https://h.uguu.se/PzKEYxOp.tar.gz"
+          )
+          for url in "${urls[@]}"; do
+            echo "Trying $url"
+            if curl --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 20 --max-time 180 "$url" --output "$archive"; then
+              actual="$(sha256sum "$archive" | awk '{print $1}')"
+              if [ "$actual" = "$expected" ]; then
+                echo "Archive checksum verified."
+                exit 0
+              fi
+              echo "Checksum mismatch: $actual"
+            fi
+          done
+          echo "No source archive passed checksum verification."
+          exit 1
 
       - name: Replace repository tree
         run: |
+          set -euo pipefail
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           tar --extract --gzip --file /tmp/jiuye-sub-manager-source.tar.gz --strip-components=1 --directory .
 
       - name: Commit and push source
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
